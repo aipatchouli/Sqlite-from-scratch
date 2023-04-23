@@ -12,6 +12,8 @@
 #include <iostream>
 #include <memory>
 
+#include "src/utils.hpp"
+
 using InputBuffer = std::string;
 
 // 判断输入的命令 以 ‘.’ 开始的 是否为 meta-commands
@@ -39,7 +41,8 @@ using StatementType = enum { STATEMENT_INSERT,
 // 执行的命令类型
 using Statement = struct {
     StatementType type;
-};
+    Row row_to_insert; // only used by insert statement
+} __attribute__((aligned(128))) __attribute__((packed));
 
 // 判断输入命令是否合法
 PrepareResult prepare_statement(std::unique_ptr<InputBuffer>& input_buffer,
