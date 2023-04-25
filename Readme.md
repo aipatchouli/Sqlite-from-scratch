@@ -8,6 +8,7 @@
     + virtual machine     
          + 操作表或索引（B tree）（VM 本质上是一个关于字节码指令类型的大 switch 语句）
     + B tree     
+         + 暂时使用数组
          + 逻辑结构
     + pager     
          + 文件读写的具体位置（磁盘，内存）

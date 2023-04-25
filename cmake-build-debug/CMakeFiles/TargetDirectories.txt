@@ -1,3 +1,0 @@
-/home/patchy/文档/C++_PROJECT/Sqlite-from-scratch/cmake-build-debug/CMakeFiles/Sqlite_from_scratch.dir
-/home/patchy/文档/C++_PROJECT/Sqlite-from-scratch/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/patchy/文档/C++_PROJECT/Sqlite-from-scratch/cmake-build-debug/CMakeFiles/rebuild_cache.dir

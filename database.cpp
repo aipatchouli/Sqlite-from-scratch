@@ -12,15 +12,20 @@
 #include <iostream>
 #include <memory>
 
-#include "src/utils.hpp"
+#include "src/RowStruction.hpp"
+#include "src/RowandPage.hpp"
+#include "src/TypeEnum.hpp"
+#include "utils.hpp"
 
 using InputBuffer = std::string;
 
-// 判断输入的命令 以 ‘.’ 开始的 是否为 meta-commands
-using MetaCommandResult = enum { META_COMMAND_SUCCESS,
-                                 META_COMMAND_UNRECOGNIZED_COMMAND
-};
+// 执行的命令类型
+using Statement = struct {
+    StatementType type;
+    Row row_to_insert; // only used by insert statement
+} __attribute__((aligned(128)));
 
+// 判断输入的命令 以 ‘.’ 开始的 是否为 meta-commands
 MetaCommandResult do_meta_command(std::unique_ptr<InputBuffer>& input_buffer) {
     if (*input_buffer == ".exit") {
         _exit(EXIT_SUCCESS);
@@ -29,27 +34,16 @@ MetaCommandResult do_meta_command(std::unique_ptr<InputBuffer>& input_buffer) {
     }
 }
 
-// 输入命令的合法性
-using PrepareResult = enum { PREPARE_SUCCESS,
-                             PREPARE_UNRECOGNIZED_STATEMENT
-};
-
-// 支持的两种操作：“插入” 和 “打印所有行”
-using StatementType = enum { STATEMENT_INSERT,
-                             STATEMENT_SELECT };
-
-// 执行的命令类型
-using Statement = struct {
-    StatementType type;
-    Row row_to_insert; // only used by insert statement
-} __attribute__((aligned(128))) __attribute__((packed));
-
 // 判断输入命令是否合法
-PrepareResult prepare_statement(std::unique_ptr<InputBuffer>& input_buffer,
-                                Statement& statement) {
+PrepareResult
+prepare_statement(std::unique_ptr<InputBuffer>& input_buffer,
+                  Statement& statement) {
     if ((*input_buffer).substr(0, 6) == "insert") {
         statement.type = STATEMENT_INSERT;
-
+        int args_assigned = sscanf_command(*input_buffer, statement.row_to_insert);
+        if (args_assigned != 3) {
+            return PREPARE_SYNTAX_ERROR;
+        }
         return PREPARE_SUCCESS;
     }
     if (*input_buffer == "select") {
@@ -66,8 +60,25 @@ auto new_input_buffer() -> std::unique_ptr<InputBuffer> {
     return input_buffer;
 }
 
-void print_prompt() {
-    std::cout << "my_sqlite_db > ";
+void close_input_buffer(std::unique_ptr<InputBuffer>& input_buffer) {
+    input_buffer.reset();
+}
+
+// 初始化 table
+auto new_table() -> std::unique_ptr<Table> {
+    auto table = std::make_unique<Table>();
+    table->num_rows = 0;
+    for (auto& page : table->pages) {
+        page = nullptr;
+    }
+    return table;
+}
+
+void free_table(std::unique_ptr<Table>& table) {
+    for (auto& page : table->pages) {
+        page.reset();
+    }
+    table.reset();
 }
 
 void read_input(std::unique_ptr<InputBuffer>& input_buffer) {
@@ -83,24 +94,44 @@ void read_input(std::unique_ptr<InputBuffer>& input_buffer) {
     // Ignore trailing newline
 }
 
-void close_input_buffer(std::unique_ptr<InputBuffer>& input_buffer) {
-    input_buffer.reset();
+// 执行 insert 语句 并 返回执行结果
+ExecuteResult execute_insert(Statement& statement, Table& table) {
+    if (table.num_rows >= TABLE_MAX_ROWS) {
+        return EXECUTE_TABLE_FULL;
+    }
+
+    auto row_to_insert = statement.row_to_insert;
+    serialize_row(row_to_insert, row_slot(table, table.num_rows));
+    table.num_rows += 1;
+
+    return EXECUTE_SUCCESS;
 }
 
-void execute_statement(Statement& statement) {
+ExecuteResult execute_select(Statement& statement, Table& table) {
+    Row row;
+    for (uint32_t i = 0; i < table.num_rows; ++i) {
+        deserialize_row(row_slot(table, i), row);
+        print_row(row);
+    }
+    return EXECUTE_SUCCESS;
+}
+
+ExecuteResult execute_statement(Statement& statement, Table& table) {
     switch (statement.type) {
     case (STATEMENT_INSERT):
-        std::cout << "This is where we would do an insert."
-                  << std::endl;
-        break;
+        return execute_insert(statement, table);
     case (STATEMENT_SELECT):
-        std::cout << "This is where we would do a select."
-                  << std::endl;
-        break;
+        return execute_select(statement, table);
     }
 }
 
+
 int main(int argc, char* argv[]) {
+    // 输出版本信息
+    print_version();
+    // 初始化 table
+    auto table = new_table();
+    // 初始化 状态缓冲区
     auto input_buffer = new_input_buffer();
     while (true) {
         print_prompt(); // 打印提示符
@@ -122,13 +153,23 @@ int main(int argc, char* argv[]) {
         switch (prepare_statement(input_buffer, statement)) {
         case (PrepareResult::PREPARE_SUCCESS):
             break;
+        case (PrepareResult::PREPARE_SYNTAX_ERROR):
+            std::cout << "Syntax error. Could not parse statement."
+                      << std::endl;
+            continue;
         case (PrepareResult::PREPARE_UNRECOGNIZED_STATEMENT):
             std::cout << "Unrecognized keyword at start of '" << *input_buffer << "'"
                       << std::endl;
             continue;
         }
 
-        execute_statement(statement);
-        std::cout << "Executed." << std::endl;
+        switch (execute_statement(statement, *table)) {
+        case (ExecuteResult::EXECUTE_SUCCESS):
+            std::cout << "Executed." << std::endl;
+            break;
+        case (ExecuteResult::EXECUTE_TABLE_FULL):
+            std::cout << "Error: Table full." << std::endl;
+            break;
+        }
     }
 }
