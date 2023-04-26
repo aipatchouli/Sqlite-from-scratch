@@ -2,7 +2,9 @@
 #define RowConvert_HPP
 
 #include "RowStruction.hpp"
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <memory>
 
 

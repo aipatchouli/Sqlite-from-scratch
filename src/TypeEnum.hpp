@@ -9,6 +9,8 @@ using MetaCommandResult = enum { META_COMMAND_SUCCESS,
 // 输入命令的合法性
 using PrepareResult = enum { PREPARE_SUCCESS,
                              PREPARE_SYNTAX_ERROR,
+                             PREPARE_STRING_TOO_LONG,
+                             PREPARE_NEGATIVE_ID,
                              PREPARE_UNRECOGNIZED_STATEMENT
 };
 

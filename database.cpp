@@ -40,11 +40,7 @@ prepare_statement(std::unique_ptr<InputBuffer>& input_buffer,
                   Statement& statement) {
     if ((*input_buffer).substr(0, 6) == "insert") {
         statement.type = STATEMENT_INSERT;
-        int args_assigned = sscanf_command(*input_buffer, statement.row_to_insert);
-        if (args_assigned != 3) {
-            return PREPARE_SYNTAX_ERROR;
-        }
-        return PREPARE_SUCCESS;
+        return sscanf_command(*input_buffer, statement.row_to_insert);
     }
     if (*input_buffer == "select") {
         statement.type = STATEMENT_SELECT;
@@ -153,6 +149,12 @@ int main(int argc, char* argv[]) {
         switch (prepare_statement(input_buffer, statement)) {
         case (PrepareResult::PREPARE_SUCCESS):
             break;
+        case (PrepareResult::PREPARE_STRING_TOO_LONG):
+            std::cout << "String is too long." << std::endl;
+            continue;
+        case (PrepareResult::PREPARE_NEGATIVE_ID):
+            std::cout << "ID must be positive." << std::endl;
+            continue;
         case (PrepareResult::PREPARE_SYNTAX_ERROR):
             std::cout << "Syntax error. Could not parse statement."
                       << std::endl;
