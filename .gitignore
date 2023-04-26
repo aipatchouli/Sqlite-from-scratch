@@ -1,3 +1,6 @@
 /build/
 .clang-format
 /.cache/
+/spec/
+Gemfile
+Gemfile.lock
