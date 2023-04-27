@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <memory>
 
-
 // 定义 一行Row如何紧凑存储
 #define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
 
@@ -36,24 +35,53 @@ const uint32_t TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 // 一次统一分配 4KB 的内存
 using page = std::array<compactRow, ROWS_PER_PAGE>;
 
-// 定义一个表的结构
-using Table = struct Table {
-    uint32_t num_rows{0}; // 记录表中的行数
+// page可能在内存中，也可能在磁盘中，增加一层抽象来泛指
+using Pager = struct Pager {
+    int file_descriptor{-1}; // 文件描述符
+    uint32_t file_length{0}; // 文件长度
     // 一个页表，每个元素是一个指针，指向一个页
     std::array<std::unique_ptr<page>, TABLE_MAX_PAGES> pages{nullptr};
 } __attribute__((aligned(128)));
 
-// 从 row_num 得到内存中读取或写入的地址
-// row_num 为行号 从 0 开始
-inline compactRow* row_slot(Table& table, uint32_t row_num) {
-    uint32_t page_num = row_num / ROWS_PER_PAGE;
-    // 得到这个页的地址
-    if (table.pages[page_num] == nullptr) {
-        // 为这个页分配内存
-        table.pages[page_num] = std::make_unique<page>();
+// 定义一个表的结构
+using Table = struct Table {
+    uint32_t num_rows{0}; // 记录表中的行数
+    std::unique_ptr<Pager> pager{nullptr};
+} __attribute__((aligned(16)));
+
+// 需要判断在内存中还是磁盘
+inline auto get_page(std::unique_ptr<Pager>& pager, uint32_t& page_num) {
+    if (page_num > TABLE_MAX_PAGES) {
+        std::cout << "Tried to fetch page number out of bounds. "
+                  << page_num << " > " << TABLE_MAX_PAGES << std::endl;
+        _exit(EXIT_FAILURE);
     }
+    if (pager->pages[page_num] == nullptr) {
+        // 不在内存中，需要分配内存
+        auto page_temp = std::make_unique<page>();
+        // 确定文件中的页数
+        uint32_t num_pages = (pager->file_length % PAGE_SIZE == 0) ? (pager->file_length / PAGE_SIZE) : ((pager->file_length / PAGE_SIZE) + 1);
+        // 判断是否在磁盘中
+        if (page_num <= num_pages) {
+            lseek(pager->file_descriptor, page_num * PAGE_SIZE, SEEK_SET);
+            auto bytes_read = read(pager->file_descriptor, page_temp.get(), PAGE_SIZE);
+            if (bytes_read == -1) {
+                std::cout << "Error reading file: " << errno << std::endl;
+                _exit(EXIT_FAILURE);
+            }
+        }
+        pager->pages[page_num] = std::move(page_temp);
+    }
+}
+
+// 从 row_num 得到内存中读取或写入的地址
+// 由于存在 在内存中 和 在磁盘中 两种可能
+inline compactRow* row_slot(std::unique_ptr<Table>& table, uint32_t& row_num) {
+    uint32_t page_num = row_num / ROWS_PER_PAGE;
+    // 从磁盘或内存中获取页
+    get_page(table->pager, page_num);
     uint32_t row_offset = row_num % ROWS_PER_PAGE;
-    auto* placeholder = &((*table.pages[page_num])[row_offset]);
+    auto* placeholder = &((*table->pager->pages[page_num])[row_offset]);
     return placeholder;
 }
 

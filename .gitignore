@@ -4,3 +4,5 @@
 /spec/
 Gemfile
 Gemfile.lock
+mydb.db
+test.db

@@ -8,11 +8,9 @@ set(CMAKE_CXX_COMPILE_FEATURES -std=c++2b -O2 )
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/bin)
 
 include_directories(src)
+aux_source_directory(src DIR_SRCS)
 
 
 add_executable(database
-                src/RowStruction.hpp
-                src/RowandPage.hpp
-                src/TypeEnum.hpp
-                src/utils.hpp
+                ${DIR_SRCS}
                 database.cpp)

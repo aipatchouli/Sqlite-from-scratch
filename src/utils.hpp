@@ -5,8 +5,8 @@
 #include <iostream>
 
 inline void print_version() {
-    std::cout << "my_sqlite_db version 0.1.0" << std::endl;
-    std::cout << "Compile Time: 2023-04-26" << std::endl;
+    std::cout << "my_sqlite_db version 0.1.1" << std::endl;
+    std::cout << "Compile Time: 2023-04-27" << std::endl;
 }
 
 inline void print_prompt() {
