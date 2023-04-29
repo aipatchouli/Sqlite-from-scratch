@@ -4,6 +4,7 @@
 #include "RowStruction.hpp"
 #include <algorithm>
 #include <array>
+#include <compare>
 #include <cstddef>
 #include <memory>
 
@@ -49,8 +50,40 @@ using Table = struct Table {
     std::unique_ptr<Pager> pager{nullptr};
 } __attribute__((aligned(16)));
 
+// 定义游标
+using Cursor = struct Cursor {
+    std::shared_ptr<Table> table{};
+    uint32_t row_num{0};
+    bool end_of_table{false};
+} __attribute__((aligned(32)));
+
+inline auto table_start(std::shared_ptr<Table>& table) {
+    auto cursor = std::make_unique<Cursor>();
+    cursor->table = table;
+    cursor->row_num = 0;
+    cursor->end_of_table = (table->num_rows == 0);
+    return cursor;
+}
+
+inline auto table_end(std::shared_ptr<Table>& table) {
+    auto cursor = std::make_unique<Cursor>();
+    cursor->table = table;
+    cursor->row_num = table->num_rows;
+    cursor->end_of_table = true;
+    return cursor;
+}
+
+inline auto cursor_advance(std::unique_ptr<Cursor>& cursor) {
+    cursor->row_num += 1;
+    if (cursor->row_num >= cursor->table->num_rows) {
+        cursor->end_of_table = true;
+    }
+}
+
+
 // 需要判断在内存中还是磁盘
-inline auto get_page(std::unique_ptr<Pager>& pager, uint32_t& page_num) {
+inline auto
+get_page(std::unique_ptr<Pager>& pager, uint32_t& page_num) {
     if (page_num > TABLE_MAX_PAGES) {
         std::cout << "Tried to fetch page number out of bounds. "
                   << page_num << " > " << TABLE_MAX_PAGES << std::endl;
@@ -76,13 +109,11 @@ inline auto get_page(std::unique_ptr<Pager>& pager, uint32_t& page_num) {
 
 // 从 row_num 得到内存中读取或写入的地址
 // 由于存在 在内存中 和 在磁盘中 两种可能
-inline compactRow* row_slot(std::unique_ptr<Table>& table, uint32_t& row_num) {
+inline compactRow* cursor_value(std::unique_ptr<Cursor>& cursor) {
+    uint32_t row_num = cursor->row_num;
     uint32_t page_num = row_num / ROWS_PER_PAGE;
-    // 从磁盘或内存中获取页
-    get_page(table->pager, page_num);
-    uint32_t row_offset = row_num % ROWS_PER_PAGE;
-    auto* placeholder = &((*table->pager->pages[page_num])[row_offset]);
-    return placeholder;
+    get_page(cursor->table->pager, page_num);
+    return cursor->table->pager->pages[page_num]->data() + (row_num % ROWS_PER_PAGE);
 }
 
 // 将一行数据 序列化为 一块连续的内存

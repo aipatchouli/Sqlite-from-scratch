@@ -74,7 +74,7 @@ auto db_open(const char* filename) {
     auto pager = pager_open(filename);
     // 记录文件中的行数
     uint32_t num_rows = pager->file_length / ROW_SIZE;
-    auto table = std::make_unique<Table>();
+    auto table = std::make_shared<Table>();
     table->pager = std::move(pager);
     table->num_rows = num_rows;
     return table;
@@ -100,7 +100,7 @@ auto pager_flush(std::unique_ptr<Pager>& pager, uint32_t page_num, uint32_t size
 }
 
 // 关闭table 固化数据
-auto db_close(std::unique_ptr<Table>& table) {
+auto db_close(std::shared_ptr<Table>& table) {
     // 计算文件中的页数
     uint32_t num_full_pages = table->num_rows / ROWS_PER_PAGE;
     for (uint32_t i = 0; i < num_full_pages; ++i) {
@@ -147,7 +147,7 @@ void read_input(std::unique_ptr<InputBuffer>& input_buffer) {
 }
 
 // 判断输入的命令 以 ‘.’ 开始的 是否为 meta-commands
-MetaCommandResult do_meta_command(std::unique_ptr<InputBuffer>& input_buffer, std::unique_ptr<Table>& table) {
+MetaCommandResult do_meta_command(std::unique_ptr<InputBuffer>& input_buffer, std::shared_ptr<Table>& table) {
     if (*input_buffer == ".exit") {
         db_close(table);
         _exit(EXIT_SUCCESS);
@@ -157,28 +157,38 @@ MetaCommandResult do_meta_command(std::unique_ptr<InputBuffer>& input_buffer, st
 }
 
 // 执行 insert 语句 并 返回执行结果
-ExecuteResult execute_insert(Statement& statement, std::unique_ptr<Table>& table) {
+ExecuteResult execute_insert(Statement& statement, std::shared_ptr<Table>& table) {
     if (table->num_rows >= TABLE_MAX_ROWS) {
         return EXECUTE_TABLE_FULL;
     }
 
     auto row_to_insert = statement.row_to_insert;
-    serialize_row(row_to_insert, row_slot(table, table->num_rows));
+    auto cursor = table_end(table);
+    serialize_row(row_to_insert, cursor_value(cursor));
     table->num_rows += 1;
 
+    cursor->table.reset();
+    cursor.reset();
+
     return EXECUTE_SUCCESS;
 }
 
-ExecuteResult execute_select(Statement& statement, std::unique_ptr<Table>& table) {
+ExecuteResult execute_select(Statement& statement, std::shared_ptr<Table>& table) {
     Row row;
-    for (uint32_t i = 0; i < table->num_rows; ++i) {
-        deserialize_row(row_slot(table, i), row);
+    auto cursor = table_start(table);
+    while (!(cursor->end_of_table)) {
+        deserialize_row(cursor_value(cursor), row);
         print_row(row);
+        cursor_advance(cursor);
     }
+
+    cursor->table.reset();
+    cursor.reset();
+
     return EXECUTE_SUCCESS;
 }
 
-ExecuteResult execute_statement(Statement& statement, std::unique_ptr<Table>& table) {
+ExecuteResult execute_statement(Statement& statement, std::shared_ptr<Table>& table) {
     switch (statement.type) {
     case (STATEMENT_INSERT):
         return execute_insert(statement, table);
@@ -196,6 +206,7 @@ int main(int argc, char* argv[]) {
     print_version();
     // 初始化 table
     char* filename = argv[1];
+    // shared_ptr 为了游标的共享
     auto table = db_open(filename);
 
     // 初始化 状态缓冲区
@@ -235,7 +246,7 @@ int main(int argc, char* argv[]) {
                       << std::endl;
             continue;
         }
-
+        
         switch (execute_statement(statement, table)) {
         case (ExecuteResult::EXECUTE_SUCCESS):
             std::cout << "Executed." << std::endl;
