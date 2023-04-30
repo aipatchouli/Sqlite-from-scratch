@@ -13,4 +13,4 @@
     + pager     
          + 文件读写的具体位置（磁盘，内存）
     + os interface
-         + 持久化
+         + 持久化 // POSIX标准: open,read,write,lseek,close
