@@ -1,10 +1,11 @@
 ### 一个简单的数据库（以Sqlite为目标）     
-+ 前端（编译：SQL查询语句 --> 数据库虚拟机字节码）
-    + tokenizer
-    + parser
-    + code generator
++ 前端（解析器 parser：SQL查询语句 --> 数据库虚拟机字节码）
+    + tokenizer (文本被拆分为“标记”流)    
+    + syntax tree
+        + 解释器 naive interpreter
+    + compiler
 
-+ 后端（解释：数据库虚拟机字节码 --> 数据库操作）
++ 后端（数据库虚拟机字节码 --> 数据库操作）
     + virtual machine     
          + 操作表或索引（B tree）（VM 本质上是一个关于字节码指令类型的大 switch 语句）
     + B tree     
